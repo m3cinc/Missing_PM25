@@ -70,7 +70,7 @@ assemble <- function (x) {
         pm<-merge(pm,df)        # do not use all=TRUE since we only want to retain the relevant sites
         pm<-unique(pm)
         x$b<-y
-        x$c< pm[]
+        x$c<-pm[]
         x
 }
 #
