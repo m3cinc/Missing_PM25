@@ -13,7 +13,7 @@
 # 2) How is the spatial distribution of these events evolving in absolute and relative terms?
 # 3) As more than 50 different values are assigned in the Null.Data.Code, can they be regrouped
 #    in 5 event groups: Limits Exceeded, Quality ,Damage ,Operator and Uncontrollable?
-# 3) How is the spatial distribution of these events evolving in absolute and
+# 4) How is the spatial distribution of these events evolving in absolute and
 #    relative terms?
 #
 # PM2.5 data files available at the US EPA web site
@@ -48,15 +48,17 @@ assemble <- function (x) {
         cnames<-readLines(datafile1, 1)
         cnames<-strsplit(cnames, "|", fixed = TRUE)
         names(pm)<-make.names(cnames[[1]])
-        y<-c(year,sum(is.na(pm$Sample.Value)),nrow(pm))
-        pm<-unique(pm)                # eliminate duplicates if any
+        y<-c(year,nrow(pm),sum(is.na(pm$Sample.Value)))
+        pm<-unique(pm)  # eliminate duplicate/multiple entries
         pm<-subset(pm,is.na(pm$Sample.Value))   # only the missing Sample.Value data
-        pm<-pm[,c(3:5,11,14)]        # trim what we won't need
+        pm<-pm[,-c(1,2,6)]        # trim RD, Action Code and Parameter Code==88101
         pm<-merge(pm,z)
         pm<-pm[complete.cases(pm[,1:3]),]
         pm$Date<-ymd(pm$Date)
         pm$Year<-year
         pm<-unique(pm)
+        # Only the uniques fully localized data have complete State.Code, County.Code and Site.ID
+        y<-c(y,nrow(pm)) # record those for dfstat 
         # read in Annual data to extract geographic positions
         df<-read.csv(datafile2,stringsAsFactors=FALSE) 
         df<-df[which(df$Parameter.Code==88101),]        # subset on PM2.5 only
@@ -130,7 +132,7 @@ for(year in xs) {print(year)
                         dfstat<-rbind(dfstat,result$b)
                         }
 }
-colnames(dfstat)<-c("year","missing","records")
+colnames(dfstat)<-c("year","records", "missing","localized")
 # recast as needed         
 pm25$State.Code<-as.integer(pm25$State.Code)
 # save this data for now
