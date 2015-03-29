@@ -38,17 +38,17 @@ library(tidyr)
 library(ggplot2)
 #
 assemble <- function (x) {
-        year<-x$a
-        y<-x$b
-        z<-x$c
-        datafile1<-paste0("RD_501_88101_",year,"-0.txt",sep='')
-        datafile2<-paste0("annual_all_",year,".csv",sep='')
-        year<-as.numeric(year)
+        year <- x$a
+        y <- x$b
+        z <- x$c
+        datafile1 <- paste0("RD_501_88101_",year,"-0.txt",sep='')
+        datafile2 <- paste0("annual_all_",year,".csv",sep='')
+        year <- as.numeric(year)
         pm <- read.table(datafile1, comment.char = "#", header = FALSE, sep = "|", na.strings = "")
         cnames <- readLines(datafile1, 1)
         cnames <- strsplit(cnames, "|", fixed = TRUE)
         names(pm) <- make.names(cnames[[1]])
-        y<-c(year,sum(is.na(pm$Sample.Value)),nrow(pm))
+        y <- c(year,sum(is.na(pm$Sample.Value)),nrow(pm))
         pm <- unique(pm)                # eliminate duplicates if any
         pm <- subset(pm,is.na(pm$Sample.Value))   # only the missing Sample.Value data
         pm <- pm[,c(3:5,11,14)]        # trim what we won't need
@@ -56,19 +56,21 @@ assemble <- function (x) {
         pm <- pm[complete.cases(pm[,1:3]),]
         pm$Date<-ymd(pm$Date)
         pm$Year<-year
+        pm <- unique(pm)
         # read in Annual data to extract geographic positions
-        df<-read.csv(datafile2,stringsAsFactors=FALSE) 
-        df<-df[which(df$Parameter.Code==88101),]        # subset on PM2.5 only
-        df<-df[,c(1:3,6,7)]                     # only retain State,County and Site.Num, Latitude and Longitude...
-        df<-unique(df)                          # retain only unique ...
+        df <- read.csv(datafile2,stringsAsFactors=FALSE) 
+        df <- df[which(df$Parameter.Code==88101),]        # subset on PM2.5 only
+        df <- df[,c(1:3,6,7)]                     # only retain State,County and Site.Num, Latitude and Longitude...
+        df <- unique(df)                          # retain only unique ...
         # add year info to df data
         df$year<-year
-        df<-df[complete.cases(df[,1:3]),]
-        df[,1]<-as.integer(df[,1])
-        df<-df[complete.cases(df[,1:3]),]
-        pm<-merge(pm,df)        # do not use all=TRUE since we only want to retain the relevant sites
-        x$b<-y
-        x$c<-pm[]
+        df < -df[complete.cases(df[,1:3]),]
+        df[,1] <- as.integer(df[,1])
+        df <- df[complete.cases(df[,1:3]),]
+        pm <- merge(pm,df)        # do not use all=TRUE since we only want to retain the relevant sites
+        pm <- unique(pm)
+        x$b <- y
+        x$c <- pm[]
         x
 }
 #
@@ -137,7 +139,7 @@ write.table(dfstat,"dfstat.dat",row.names=FALSE)
 write.table(pm25,"pm25.dat",row.names=FALSE)
 #
 # cleanup
-rm(year,xs,x,result,datafile)
+rm(year,xs,x,result)
 #
 # now, let's place questionable data for which site.ID!=Site.Num into a Special Event.Type S
 # and replace their Qualifier.Desc to describe inconsistency...
