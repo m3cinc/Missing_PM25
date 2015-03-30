@@ -65,7 +65,7 @@ assemble <- function (x) {
         df<-df[,c(1:3,6,7)]                     # only retain State,County and Site.Num, Latitude and Longitude...
         df<-unique(df)                          # retain only unique ...
         # add year info to df data
-        df$year<-year
+        df$Year<-year
         df<-df[complete.cases(df[,1:3]),]
         df[,1]<-as.integer(df[,1])
         df<-df[complete.cases(df[,1:3]),]
@@ -133,6 +133,7 @@ for(year in xs) {print(year)
                         }
 }
 colnames(dfstat)<-c("year","records", "missing","localized")
+dfstat<-as.data.frame(dfstat)
 # recast as needed         
 pm25$State.Code<-as.integer(pm25$State.Code)
 # save this data for now
@@ -147,8 +148,8 @@ rm(year,xs,x,result)
 # and replace their Qualifier.Desc to describe inconsistency...
 #
 levels(pm25$Event.Type)<-c(levels(pm25$Event.Type),"S") # create additional factor level
-pm25[which(pm25$Site.ID!=pm25$Site.Num),6]<-"S"
-pm25[which(pm25$Site.ID!=pm25$Site.Num),7]<-"Inconsistent Data Site Identification"
+pm25[which(pm25$Site.ID!=pm25$Site.Num),26]<-"S"
+pm25[which(pm25$Site.ID!=pm25$Site.Num),27]<-"Inconsistent Data Site Identification"
 #
 # determine inconsistent records per year and add to dfstat
 #
@@ -157,10 +158,6 @@ pm<-select(pm,State.Code,year,Longitude,Latitude)
 inconsistent<-group_by(pm,year)
 inconsistent<-summarize(inconsistent,count=n())
 merge(dfstat,inconsistent)
-
-
-
-
 
 stop()
 myPNGfile<-"plot1.png"
