@@ -148,14 +148,14 @@ rm(year,xs,x,result)
 # and replace their Qualifier.Desc to describe inconsistency...
 #
 levels(pm25$Event.Type)<-c(levels(pm25$Event.Type),"S") # create additional factor level
-pm25[which(pm25$Site.ID!=pm25$Site.Num),26]<-"S"
-pm25[which(pm25$Site.ID!=pm25$Site.Num),27]<-"Inconsistent Data Site Identification"
+pm25[which(pm25$Site.ID!=pm25$Site.Num),27]<-"S"
+pm25[which(pm25$Site.ID!=pm25$Site.Num),28]<-"Inconsistent Data Site Identification"
 #
 # determine inconsistent records per year and add to dfstat
 #
 pm<-filter(pm25,Event.Type=="S")
-pm<-select(pm,State.Code,year,Longitude,Latitude)
-inconsistent<-group_by(pm,year)
+pm<-select(pm,State.Code,Year,Longitude,Latitude)
+inconsistent<-group_by(pm,Year)
 inconsistent<-summarize(inconsistent,count=n())
 merge(dfstat,inconsistent)
 
