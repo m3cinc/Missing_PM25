@@ -51,7 +51,7 @@ assemble <- function (x) {
         y<-c(year,nrow(pm),sum(is.na(pm$Sample.Value)))
         pm<-unique(pm)  # eliminate duplicate/multiple entries
         pm<-subset(pm,is.na(pm$Sample.Value))   # only the missing Sample.Value data
-        pm<-pm[,-c(1,2,6)]        # trim RD, Action Code and Parameter Code==88101
+        pm<-pm[,-c(1,2,6,13)]        # trim RD, Action Code, Parameter Code==88101 and Sample Value==NA
         pm<-merge(pm,z)
         pm<-pm[complete.cases(pm[,1:3]),]
         pm$Date<-ymd(pm$Date)
@@ -132,7 +132,7 @@ for(year in xs) {print(year)
                         dfstat<-rbind(dfstat,result$b)
                         }
 }
-colnames(dfstat)<-c("year","records", "missing","localized")
+colnames(dfstat)<-c("Year","Records", "Missing","Localized")
 dfstat<-as.data.frame(dfstat)
 # recast as needed         
 pm25$State.Code<-as.integer(pm25$State.Code)
@@ -148,15 +148,15 @@ rm(year,xs,x,result)
 # and replace their Qualifier.Desc to describe inconsistency...
 #
 levels(pm25$Event.Type)<-c(levels(pm25$Event.Type),"S") # create additional factor level
-pm25[which(pm25$Site.ID!=pm25$Site.Num),27]<-"S"
-pm25[which(pm25$Site.ID!=pm25$Site.Num),28]<-"Inconsistent Data Site Identification"
+pm25[which(pm25$Site.ID!=pm25$Site.Num),26]<-"S"
+pm25[which(pm25$Site.ID!=pm25$Site.Num),27]<-"Inconsistent Data Site Identification"
 #
 # determine inconsistent records per year and add to dfstat
 #
 pm<-filter(pm25,Event.Type=="S")
 pm<-select(pm,State.Code,Year,Longitude,Latitude)
 inconsistent<-group_by(pm,Year)
-inconsistent<-summarize(inconsistent,count=n())
+inconsistent<-summarize(inconsistent,Count=n())
 merge(dfstat,inconsistent)
 
 stop()
