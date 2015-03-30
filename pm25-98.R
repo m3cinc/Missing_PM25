@@ -32,60 +32,79 @@
 #       me a tidy data set
 #
 #install.packages("lubridate")
+#install.packages("RCurl") # needed to handle Certified (SSL) URL
 library(lubridate)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(RCurl)
+#
+download.flag<-FALSE       # TRUE for URL download, FALSE for Local data read
+#
+url1A<-"http://www.epa.gov/ttn/airs/airsaqs/detaildata/501files/Rd_501_88101_YYYY.Zip"
+url1B<-"http://www.epa.gov/ttn/airs/airsaqs/detaildata/501files/RD_501_88101_YYYY.zip"
+url2<-"http://aqsdr1.epa.gov/aqsweb/aqstmp/airdata/annual_all_YYYY.zip"
+url3<-"https://aqs.epa.gov/aqsweb/codes/data/QualifierCodesNULL.csv"
 #
 assemble <- function (x) {
-        year<-x$a
-        y<-x$b
-        z<-x$c
-        datafile1<-paste0("RD_501_88101_",year,"-0.txt",sep='')
-        datafile2<-paste0("annual_all_",year,".csv",sep='')
-        year<-as.numeric(year)
+        year.analyzed<-x$a 
+        year.statistics<-vector() # initialize a vector to return the year's dfstat data
+        if(download.flag==TRUE){datafile1<-paste0("RD_501_88101_",as.character(year.analyzed),"-0.zip",sep='')
+                                if(y<=2007){url<-url1A}else{url<-url1B}
+                                url<-gsub("YYYY",as.character(y),url)
+                                download.file(url, dest=datafile1, mode="wb")
+                                unzip (datafile1)       # unzip creates and populates the data structure 
+                                unlink(datafile1)
+                                }
+        datafile1<-paste0("RD_501_88101_",as.character(year.analyzed),"-0.txt",sep='')
         pm<-read.table(datafile1, comment.char = "#", header = FALSE, sep = "|", na.strings = "")
         cnames<-readLines(datafile1, 1)
         cnames<-strsplit(cnames, "|", fixed = TRUE)
         names(pm)<-make.names(cnames[[1]])
-        y<-c(year,nrow(pm),sum(is.na(pm$Sample.Value)))
-        pm<-unique(pm)  # eliminate duplicate/multiple entries
-        pm<-subset(pm,is.na(pm$Sample.Value))   # only the missing Sample.Value data
-        pm<-pm[,-c(1,2,6,13)]        # trim RD, Action Code, Parameter Code==88101 and Sample Value==NA
-        pm<-merge(pm,z)
-        pm<-pm[complete.cases(pm[,1:3]),]
+        # populate year statistics vector with year, records, missing... 
+        year.statistics<-c(year.analyzed,nrow(pm),sum(is.na(pm$Sample.Value)))
+        pm<-subset(pm,is.na(pm$Sample.Value))   # retain only the missing Sample.Value data subset
+        # trim RD, Action Code, Parameter Code==88101, Start.Time and Sample Value==NA entries 
+        pm<-pm[,-c(1,2,6,12,13)]
+        # cast date to date format and add a year variable to facilitate merging later...
         pm$Date<-ymd(pm$Date)
-        pm$Year<-year
-        pm<-unique(pm)
-        # Only the uniques fully localized data have complete State.Code, County.Code and Site.ID
-        y<-c(y,nrow(pm)) # record those for dfstat 
+        pm$Year<-year.analyzed
+        for(i in 1:3) {pm[,i]<-as.numeric(pm[,i])}
+        # retain only entries that have full localization data...
+        # must have complete State.Code, County.Code and Site.ID
+        pm<-pm[complete.cases(pm[,1:3]),]
+        pm<-merge(pm,x$b)
+        pm$key<-paste(as.character(pm$State.Code),as.character(pm$County.Code),as.character(pm$Site.ID),sep=":")
+        # this is where things go wrong...
+        # pm<-unique(pm)
         # read in Annual data to extract geographic positions
+        if(download.flag==TRUE){datafile2<-paste0("annual_all_",as.character(year.analyzed),".zip",sep='')
+                                url<-gsub("YYYY",as.character(y),url2)
+                                download.file(url, dest=datafile2, mode="wb")
+                                unzip (datafile2)       # unzip creates and populates the data structure 
+                                unlink(datafile2)
+                                }
+        datafile2<-paste0("annual_all_",as.character(year.analyzed),".csv",sep='')
         df<-read.csv(datafile2,stringsAsFactors=FALSE) 
         df<-df[which(df$Parameter.Code==88101),]        # subset on PM2.5 only
         df<-df[,c(1:3,6,7)]                     # only retain State,County and Site.Num, Latitude and Longitude...
-        df<-unique(df)                          # retain only unique ...
-        # add year info to df data
-        df$Year<-year
+        df<-unique(df)                          # retain only unique entries to merge
+        for(i in 1:3) {df[,i]<-as.numeric(df[,i])}  # insure all positional data is numeric, not int
         df<-df[complete.cases(df[,1:3]),]
-        df[,1]<-as.integer(df[,1])
-        df<-df[complete.cases(df[,1:3]),]
-        pm<-merge(pm,df)        # do not use all=TRUE since we only want to retain the relevant sites
-        pm<-unique(pm)
-        x$b<-y
-        x$c<-pm[]
-        x
+        # do not use all=TRUE since we only want to retain the sites reported in pm subset        
+        df$key<-paste(as.character(df$State.Code),as.character(df$County.Code),as.character(df$Site.Num),sep=":")
+        # remove State.Code, County.Code, Site.Num since...
+        # discrepancies likely in Site.Code vs Site.ID, can be tracked instead ...
+        df<-df[-c(1:3)]   
+        localized<-merge(pm,df)                 # ... subset on localized factor,
+        year.statistics<-c(year.statistics,nrow(localized)) # ...and reported
+        pm$Localized<-factor(pm$key %in% localized$key) # create a localized factor variable
+        pm<-merge(pm,localized,all=TRUE)        # so pm can easily be subset later for display  
+        m<-unique(pm)                           # insure no duplicate counts
+        # rebuild the list and return it
+        x$a<-pm;x$b<-year.statistics
+        x 
 }
-#
-# Retrieve Null.Data.Code events from QualifierCodesNULL.csv file, grouped as:
-# 
-#       D: Damage
-#       L: Limits Exceeded
-#       Q: Quality
-#       N: Non-controllable
-#       O: Operator
-#
-# return the Qualifiers data frame
-#
 code.D<-c('AC','AD','AJ','AK','AN','BA','BE','BI','BK','FI','MC','SC')
 code.L<-c('AA','AE','AG','AH','BN','BR','DL','TS')
 code.N<-c('AO','AP','AV','AW','SA')
@@ -98,44 +117,38 @@ type<-c(rep('D',length(code.D)),
         rep('O',length(code.O)),
         rep('Q',length(code.Q)))
 q.group<-cbind(codes,type)
-Qualifiers<-readLines("QualifierCodesNULL.csv",2)
+# retrieve info using url or locally
+filename<-"QualifierCodesNULL.csv"
+if(download.flag==TRUE){download.file(url3, dest=filename, mode="wb")}
+Qualifiers<-readLines(filename,2)
 Qualifiers<-Qualifiers[-1]        # get rid of the title line
 Qualifiers <- strsplit(Qualifiers, ",", fixed = TRUE)
-null.code <- read.table("QualifierCodesNULL.csv", skip=2, header = FALSE, sep = ",", na.strings = "",stringsAsFactors=FALSE)
+null.code <- read.table(filename, skip=2, header = FALSE, sep = ",", na.strings = "",stringsAsFactors=FALSE)
 names(null.code) <- make.names(Qualifiers[[1]])
 null.code<-null.code[,1:2]      # drop what we don't need
 colnames(q.group)[1]<-colnames(null.code)[1]
 colnames(q.group)[2]<-'Event.Type'
 Qualifiers<-merge(q.group,null.code)
 colnames(Qualifiers)[1]<-'Null.Data.Code'
-rm(null.code,q.group,codes,type,code.D,code.L,code.N,code.O,code.Q)     # cleanup
+rm(null.code,q.group,codes,type,code.D,code.L,code.N,code.O,code.Q) 
+# cleanup
 #
 # now initialize data frame to collect missing data from pm data files
 #
-pm25<-data.frame()      # start with a clean data.frame to accumulate all data
-dfstat<-data.frame()
-result<-list()
-x<-list()
+a<-data.frame()
+b<-data.frame()
+dfstat<-data.frame(Year=1998,Records=0,Missing=0,Localized=0)
+x<-list(a,b)
 #
 # populate (iteratively)
 #
-xs<-1998:2013
-for(year in xs) {print(year)
-                x$a<-as.character(year)
-                x$b<-dfstat[]
-                x$c<-Qualifiers[]
-                result<-assemble(x)
-                if (year==1998) {dfstat<-result$b
-                                pm25<-result$c
-                                }
-                else    {pm25<-rbind(pm25,result$c)
-                        dfstat<-rbind(dfstat,result$b)
-                        }
+for(y in 1998:2013) {print(y);x$a<-y;x$b<-Qualifiers;x<-assemble(x)
+                     if (y==1998){pm25<-as.data.frame(x$a);dfstat[1,]<-x$b} else{pm25<-rbind(pm25,x$a);dfstat<-rbind(dfstat,x$b)}
 }
-colnames(dfstat)<-c("Year","Records", "Missing","Localized")
-dfstat<-as.data.frame(dfstat)
-# recast as needed         
-pm25$State.Code<-as.integer(pm25$State.Code)
+stop()
+#
+# cleanup
+rm(i,x)
 # save this data for now
 write.csv(Qualifiers,"qualifiers.csv",row.names=FALSE)
 write.table(dfstat,"dfstat.dat",row.names=FALSE)
