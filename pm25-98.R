@@ -145,50 +145,35 @@ x<-list(a,b)
 for(y in 1998:2013) {print(y);x$a<-y;x$b<-Qualifiers;x<-assemble(x)
                      if (y==1998){pm25<-as.data.frame(x$a);dfstat[1,]<-x$b} else{pm25<-rbind(pm25,x$a);dfstat<-rbind(dfstat,x$b)}
 }
-stop()
 #
-# cleanup
-rm(i,x)
-# save this data for now
-write.csv(Qualifiers,"qualifiers.csv",row.names=FALSE)
-write.table(dfstat,"dfstat.dat",row.names=FALSE)
-write.table(pm25,"pm25.dat",row.names=FALSE)
+rm(a,b,x,y,url1A,url1B,url2,url3) # cleanup and save this data for now
 #
-# cleanup
-rm(year,xs,x,result)
+#write.csv(Qualifiers,"qualifiers.csv",row.names=FALSE)
+#write.table(dfstat,"dfstat.dat",row.names=FALSE)
+#write.table(pm25,"pm25.dat",row.names=FALSE)
 #
-# now, let's place questionable data for which site.ID!=Site.Num into a Special Event.Type S
-# and replace their Qualifier.Desc to describe inconsistency...
+pm25<-pm25[,c(1:4,9:10,24:26,28:30)]
 #
-levels(pm25$Event.Type)<-c(levels(pm25$Event.Type),"S") # create additional factor level
-pm25[which(pm25$Site.ID!=pm25$Site.Num),26]<-"S"
-pm25[which(pm25$Site.ID!=pm25$Site.Num),27]<-"Inconsistent Data Site Identification"
+dfstat2<-mutate(dfstat,Reported=Records-Missing,Unlocalized=Missing-Localized)
+dfstat3<-gather(dfstat2,"Type","Count",2,4,3)
+dfstat3<-group_by(dfstat3,Year)
+dfstat3<-as.data.frame(dfstat3)
 #
-# determine inconsistent records per year and add to dfstat
-#
-pm<-filter(pm25,Event.Type=="S")
-pm<-select(pm,State.Code,Year,Longitude,Latitude)
-inconsistent<-group_by(pm,Year)
-inconsistent<-summarize(inconsistent,Count=n())
-merge(dfstat,inconsistent)
-
-stop()
-myPNGfile<-"plot1.png"
+myPNGfile<-"plot0.png"
 png(filename=myPNGfile,width=480,height=480) ## open png device for plot1.png 480x480 pix
-ggplot (dfstat,
-        aes(year,y=(missing/records)*1e2))+
-        geom_bar(stat="identity",
-                 color="blue",fill="blue")+
-        stat_smooth(data=dfstat,
-                    aes(x=year,y=(missing/records)*1e2,group=1),
-                    fill="blue",
-                    color="orange",
+ggplot (data=dfstat3,
+        aes(x=Year,y=Count/1e6,fill=Type))+
+        geom_bar(stat="identity")+
+        stat_smooth(data=dfstat3[which(dfstat3$Year>=2008),],
+                    aes(x=Year,y=Count/1e6,group=Type),
+                    color="Black",
                     size=1,
                     method=lm,
                     se=FALSE)+
-        labs(title="Annual % of missing PM2.5 data in EPA reports - US\n with Linear Trendline since Y1998")+
+        labs(title="Annual Count of PM2.5 data in EPA reports - US\n with Linear Trendline since Y1998")+
         xlab("Year")+
-        ylab("% of missing data in EPA PM2.5 annual reports")
+        ylab("Millions of Annual PM2.5 data reported")
+
 dev.off() # close png device
 ##
 ## verify PNG file exists and indicate its file.info()
@@ -196,16 +181,41 @@ print(file.exists(myPNGfile))
 #> [1] TRUE
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot1.png 5420 FALSE  666 2015-03-28 21:26:04 2015-03-27 21:32:28 2015-03-27 21:32:28  no
+#> plot0.png 6478 FALSE  666 2015-03-30 20:54:18 2015-03-30 20:52:23 2015-03-30 20:52:23  no
+#
+dfstat4<-mutate(dfstat,Missing.Ratio=Missing/Records,Localized.Ratio=Localized/Records)
+dfstat4<-dfstat4[,-(2:4)]
+dfstat5<-gather(dfstat4,"Ratios","Percentages",2,3)
+dfstat5<-group_by(dfstat5,Year)
+dfstat5<-as.data.frame(dfstat5)
+myPNGfile<-"plot1.png"
+png(filename=myPNGfile,width=480,height=480) ## open png device for plot1.png 480x480 pix
+ggplot (dfstat5,
+        aes(x=Year,y=Percentages*1e2,fill=Ratios))+
+        geom_bar(stat="identity")+
+        geom_hline(aes(yintercept=1e2*(sum(dfstat$Missing)/sum(dfstat$Records))))+
+        facet_wrap(~Ratios,ncol=1)+
+        labs(title="Percentage of US Sites Missing PM2.5 Data Records\nwith missing mean level since Y1998")+
+        xlab("Year")+
+        ylab("Percentage of US Sites Records reporting missing PM2.5 data")
+        
+dev.off() # close png device
+##
+## verify PNG file exists and indicate its file.info()
+print(file.exists(myPNGfile))
+#> [1] TRUE
+print(file.info(myPNGfile))
+#> size isdir mode               mtime               ctime               atime exe
+#> plot1.png 7608 FALSE  666 2015-03-30 21:54:04 2015-03-30 21:50:46 2015-03-30 21:50:46  no
 #
 myPNGfile<-"plot2.png"
 png(filename=myPNGfile,width=480,height=480) ## open png device for plot1.png 480x480 pix
 ggplot (dfstat,
-        aes(year,records*1e-6))+
+        aes(Year,Records*1e-6))+
         geom_bar(stat="identity",
                  color="blue",fill="blue")+
-        stat_smooth(data=dfstat[which(dfstat$year>=2008),],
-                    aes(x=year,y=records*1e-6,group=1),
+        stat_smooth(data=dfstat[which(dfstat$Year>=2008),],
+                    aes(x=Year,y=Records*1e-6,group=1),
                     fill="blue",
                     color="orange",
                     size=1,
@@ -222,6 +232,8 @@ print(file.exists(myPNGfile))
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
 #> plot2.png 6378 FALSE  666 2015-03-28 21:39:38 2015-03-28 21:38:48 2015-03-28 21:38:48  no
+#
+stop()
 #
 # pm25<-read.table(file="pm25.dat",header=TRUE,stringsAsFactors=FALSE)  # in case of power outage...
 #
