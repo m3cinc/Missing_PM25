@@ -39,23 +39,32 @@ library(tidyr)
 library(ggplot2)
 library(RCurl)
 #
-download.flag<-FALSE       # TRUE for URL download, FALSE for Local data read
+download.flag<-FALSE    # TRUE for URL download, FALSE for Local data read
+savefile.flag<-FALSE    # TRUE for local save (in case of power failures...)
 #
 url1A<-"http://www.epa.gov/ttn/airs/airsaqs/detaildata/501files/Rd_501_88101_YYYY.Zip"
 url1B<-"http://www.epa.gov/ttn/airs/airsaqs/detaildata/501files/RD_501_88101_YYYY.zip"
 url2<-"http://aqsdr1.epa.gov/aqsweb/aqstmp/airdata/annual_all_YYYY.zip"
 url3<-"https://aqs.epa.gov/aqsweb/codes/data/QualifierCodesNULL.csv"
+url4<-"http://www2.census.gov/geo/docs/reference/state.txt"
+url5A<-"http://www2.census.gov/geo/docs/reference/codes/files/national_county.txt"
+url5B<-"http://www2.census.gov/geo/docs/reference/codes/files/st60_as_cou.txt"
+url5C<-"http://www2.census.gov/geo/docs/reference/codes/files/st66_gu_cou.txt"
+url5D<-"http://www2.census.gov/geo/docs/reference/codes/files/st69_mp_cou.txt"
+url5E<-"http://www2.census.gov/geo/docs/reference/codes/files/st72_pr_cou.txt"
+url5F<-"http://www2.census.gov/geo/docs/reference/codes/files/st74_um_cou.txt"
+url5G<-"http://www2.census.gov/geo/docs/reference/codes/files/st78_vi_cou.txt"
 #
 assemble <- function (x) {
         year.analyzed<-x$a 
         year.statistics<-vector() # initialize a vector to return the year's dfstat data
         if(download.flag==TRUE){datafile1<-paste0("RD_501_88101_",as.character(year.analyzed),"-0.zip",sep='')
                                 if(y<=2007){url<-url1A}else{url<-url1B}
-                                url<-gsub("YYYY",as.character(y),url)
+                                url<-gsub("YYYY",as.character(year.analyzed),url)
                                 download.file(url, dest=datafile1, mode="wb")
                                 unzip (datafile1)       # unzip creates and populates the data structure 
                                 unlink(datafile1)
-                                }
+        }
         datafile1<-paste0("RD_501_88101_",as.character(year.analyzed),"-0.txt",sep='')
         pm<-read.table(datafile1, comment.char = "#", header = FALSE, sep = "|", na.strings = "")
         cnames<-readLines(datafile1, 1)
@@ -65,46 +74,77 @@ assemble <- function (x) {
         year.statistics<-c(year.analyzed,nrow(pm),sum(is.na(pm$Sample.Value)))
         pm<-subset(pm,is.na(pm$Sample.Value))   # retain only the missing Sample.Value data subset
         # trim RD, Action Code, Parameter Code==88101, Start.Time and Sample Value==NA entries 
-        pm<-pm[,-c(1,2,6,12,13)]
-        # cast date to date format and add a year variable to facilitate merging later...
-        pm$Date<-ymd(pm$Date)
+        pm<-pm[,-c(1,2,6,13)]
+        # cast Date to date format and substitute Start.Time with Year variable to facilitate merging later...
+        pm$Date<-parse_date_time(paste(pm$Date,pm$Start.Time,sep=" "),"%Y%m%d %H:%M")
+        colnames(pm)[9]<-"Year"
         pm$Year<-year.analyzed
-        for(i in 1:3) {pm[,i]<-as.numeric(pm[,i])}
         # retain only entries that have full localization data...
         # must have complete State.Code, County.Code and Site.ID
         pm<-pm[complete.cases(pm[,1:3]),]
-        pm<-merge(pm,x$b)
+        pm<-merge(pm,x$b, by="Null.Data.Code")       # all missing events are now categorized
         pm$key<-paste(as.character(pm$State.Code),as.character(pm$County.Code),as.character(pm$Site.ID),sep=":")
-        # this is where things go wrong...
-        # pm<-unique(pm)
+        # and keyed
         # read in Annual data to extract geographic positions
         if(download.flag==TRUE){datafile2<-paste0("annual_all_",as.character(year.analyzed),".zip",sep='')
-                                url<-gsub("YYYY",as.character(y),url2)
+                                url<-gsub("YYYY",as.character(year.analyzed),url2)
                                 download.file(url, dest=datafile2, mode="wb")
                                 unzip (datafile2)       # unzip creates and populates the data structure 
                                 unlink(datafile2)
-                                }
+        }
         datafile2<-paste0("annual_all_",as.character(year.analyzed),".csv",sep='')
         df<-read.csv(datafile2,stringsAsFactors=FALSE) 
         df<-df[which(df$Parameter.Code==88101),]        # subset on PM2.5 only
         df<-df[,c(1:3,6,7)]                     # only retain State,County and Site.Num, Latitude and Longitude...
-        df<-unique(df)                          # retain only unique entries to merge
-        for(i in 1:3) {df[,i]<-as.numeric(df[,i])}  # insure all positional data is numeric, not int
         df<-df[complete.cases(df[,1:3]),]
-        # do not use all=TRUE since we only want to retain the sites reported in pm subset        
+        df<-unique(df)                          # retain only unique entries to merge
+        # build a key and remove State.Code, County.Code, Site.Num since...
         df$key<-paste(as.character(df$State.Code),as.character(df$County.Code),as.character(df$Site.Num),sep=":")
-        # remove State.Code, County.Code, Site.Num since...
-        # discrepancies likely in Site.Code vs Site.ID, can be tracked instead ...
-        df<-df[-c(1:3)]   
-        localized<-merge(pm,df)                 # ... subset on localized factor,
-        year.statistics<-c(year.statistics,nrow(localized)) # ...and reported
-        pm$Localized<-factor(pm$key %in% localized$key) # create a localized factor variable
-        pm<-merge(pm,localized,all=TRUE)        # so pm can easily be subset later for display  
-        m<-unique(pm)                           # insure no duplicate counts
-        # rebuild the list and return it
-        x$a<-pm;x$b<-year.statistics
-        x 
+        df<-df[-c(1:3)] 
+        #
+        # most likely, some State.Code fields were populated with a State.Abr code...
+        # it would be interesting to verify this hypothesis... on the to-do list!
+        #
+        suppressWarnings(pm$State.Code<-as.integer(pm$State.Code))        # this will flag a few additional invalid localization
+        pm<-subset(pm,!is.na(pm$State.Code))            # retain only non-missing State.Codes in pm data subset
+        # do not use all=TRUE since we only want to retain the sites reported in pm subset        
+        localized<-merge(pm,df,by="key")                        # ... subset on localized factor,
+        pm$Geolocalized<-factor(pm$key %in% localized$key)      # create a Geolocalized factor variable
+        pm<-merge(pm,df,by="key")                       # so pm can easily be subset later for display  
+        pm<-pm[,-1]                                     # drop the key we do not need anymore
+        # now add the State and County info to the pm25 data frame
+        pm$State.Code<-sapply(pm$State.Code, updateStateCode)
+        pm$key<-paste(pm$State.Code,pm$County.Code,sep=":")     # build a key
+        pm<-pm[,-c(2,3)]                                # drop State.Code and County.Code
+        pm<-merge(pm,x$c,by="key")                      # likely will drop some records due to State.Code 7...(Panama Canal)
+        year.statistics<-c(year.statistics,nrow(pm))    # ...and report clean localized count in year.statistics
+        pm<-pm[,-1]                                     # drop the key we do not need anymore
+        x$a<-pm;x$b<-year.statistics                    # rebuild the list and return it
+        x
 }
+#
+# helper function for text conversion when calling maps...
+#
+simpleCap <- function(x) {
+        s <- tolower(x)
+        s <- strsplit(x, " ")[[1]]
+        paste(toupper(substring(s, 1,1)), substring(s, 2),
+              sep="", collapse=" ")
+}
+#
+# helper to update State.Code to match current FIPS
+updateStateCode <- function(x) {
+        x[x==3]<-60         # American Samoa
+        x[x==14]<-66        # Guam
+        x[x==52]<-78        # US Virgin Islands
+        x[x==43]<-72        # Puerto Rico
+        x[x==7]<-NA         # Panama Canal
+        x
+}
+
+#
+# start with building the Qualifiers data frame
+#
 code.D<-c('AC','AD','AJ','AK','AN','BA','BE','BI','BK','FI','MC','SC')
 code.L<-c('AA','AE','AG','AH','BN','BR','DL','TS')
 code.N<-c('AO','AP','AV','AW','SA')
@@ -131,85 +171,90 @@ colnames(q.group)[2]<-'Event.Type'
 Qualifiers<-merge(q.group,null.code)
 colnames(Qualifiers)[1]<-'Null.Data.Code'
 rm(null.code,q.group,codes,type,code.D,code.L,code.N,code.O,code.Q) 
-# cleanup
+#
+# we can retrieve the state and county data from the Census Bureau
+#
+# retrieve info using url or locally
+filename<-"state.txt"
+if(download.flag==TRUE){download.file(url4, dest=filename, mode="wb")}
+States.Info<-read.table(filename, header = TRUE, sep = "|", na.strings = "")
+States.Info<-States.Info[,-4]
+colnames(States.Info)<-c("State.Code","State.Abr","State.Name")
+#
+# note the quote excludes sigle quotes a delimiter which can pose problems in some names...
+#
+filename<-"national_county.txt"
+if(download.flag==TRUE){download.file(url5A, dest=filename, mode="wb")}
+suppressWarnings(County.Info<-read.table(filename, quote="\"",sep = ","))
+filename<-"st60_as_cou.txt"
+if(download.flag==TRUE){download.file(url5B, dest=filename, mode="wb")}
+appendix<-read.table(filename, quote="\"",sep = ",")
+suppressWarnings(County.Info<-rbind(County.Info,appendix))
+filename<-"st66_gu_cou.txt"
+if(download.flag==TRUE){download.file(url5C, dest=filename, mode="wb")}
+suppressWarnings(appendix<-read.table(filename, quote="\"",sep = ","))
+County.Info<-rbind(County.Info,appendix)
+filename<-"st69_mp_cou.txt"
+if(download.flag==TRUE){download.file(url5D, dest=filename, mode="wb")}
+suppressWarnings(appendix<-read.table(filename, quote="\"",sep = ","))
+County.Info<-rbind(County.Info,appendix)
+filename<-"st72_pr_cou.txt"
+if(download.flag==TRUE){download.file(url5E, dest=filename, mode="wb")}
+suppressWarnings(appendix<-read.table(filename, quote="\"",sep = ","))
+County.Info<-rbind(County.Info,appendix)
+filename<-"st74_um_cou.txt"
+if(download.flag==TRUE){download.file(url5F, dest=filename, mode="wb")}
+suppressWarnings(appendix<-read.table(filename, quote="\"",sep = ","))
+County.Info<-rbind(County.Info,appendix)
+filename<-"st78_vi_cou.txt"
+if(download.flag==TRUE){download.file(url5G, dest=filename, mode="wb")}
+suppressWarnings(appendix<-read.table(filename, quote="\"",sep = ","))
+County.Info<-rbind(County.Info,appendix)
+# trimoff what is redundant
+County.Info<-County.Info[,c(1,3,4)]       # retain State.Abr, County.Code and County.Name
+colnames(County.Info)<-c("State.Abr","County.Code","County.Name")
+# now merge with States.Info
+County.Info<-merge(County.Info,States.Info,by="State.Abr")
+# now make a key for mergeing
+County.Info<-mutate(County.Info,key=paste(State.Code,County.Code,sep=":"))
+#
+rm(appendix,filename,url4,url5A,url5B,url5C,url5D,url5E,url5F,url5G)    # cleanup
 #
 # now initialize data frame to collect missing data from pm data files
 #
 a<-data.frame()
 b<-data.frame()
-dfstat<-data.frame(Year=1998,Records=0,Missing=0,Localized=0)
-x<-list(a,b)
+c<-data.frame()
+dfstat<-data.frame(Year=1998,Records=0,Missing=0,Geolocalized=0)
+x<-list(a,b,c)
 #
 # populate (iteratively)
 #
-for(y in 1998:2013) {print(y);x$a<-y;x$b<-Qualifiers;x<-assemble(x)
+for(y in 1998:2013) {print(y);x$a<-y;x$b<-Qualifiers;x$c<-County.Info;x<-assemble(x)
                      if (y==1998){pm25<-as.data.frame(x$a);dfstat[1,]<-x$b} else{pm25<-rbind(pm25,x$a);dfstat<-rbind(dfstat,x$b)}
 }
 #
-rm(a,b,x,y,url1A,url1B,url2,url3) # cleanup and save this data for now
+rm(a,b,c,x,y,url1A,url1B,url2,url3) # cleanup and save this data for now
+County.Info<-County.Info[,-6]   # drop the key
 #
-#write.csv(Qualifiers,"qualifiers.csv",row.names=FALSE)
-#write.table(dfstat,"dfstat.dat",row.names=FALSE)
-#write.table(pm25,"pm25.dat",row.names=FALSE)
+# pm25 is fully Geolocalized to allow mapping down to the US county level
 #
-pm25<-pm25[,c(1:4,9:10,24:26,28:30)]
+if (savefile.flag==TRUE){write.csv(Qualifiers,"qualifiers.csv",row.names=FALSE)
+                         write.csv(States.Info,"statesinfo.csv",row.names=FALSE)
+                         write.csv(County.Info,"countyinfo.csv",row.names=FALSE)
+                         write.table(dfstat,"dfstat.dat",row.names=FALSE)
+                         write.table(pm25,"pm25.dat",row.names=FALSE)
+}
 #
-dfstat2<-mutate(dfstat,Reported=Records-Missing,Unlocalized=Missing-Localized)
-dfstat3<-gather(dfstat2,"Type","Count",2,4,3)
-dfstat3<-group_by(dfstat3,Year)
-dfstat3<-as.data.frame(dfstat3)
+# pm25<-read.table(file="pm25.dat",header=TRUE,stringsAsFactors=FALSE)  # in case of power outage...
+#
+#
+pm25<-pm25[,-c(2:6,10:22)]  # trim what we won't use for now
+#
+# Begin plots
 #
 myPNGfile<-"plot0.png"
-png(filename=myPNGfile,width=480,height=480) ## open png device for plot1.png 480x480 pix
-ggplot (data=dfstat3,
-        aes(x=Year,y=Count/1e6,fill=Type))+
-        geom_bar(stat="identity")+
-        stat_smooth(data=dfstat3[which(dfstat3$Year>=2008),],
-                    aes(x=Year,y=Count/1e6,group=Type),
-                    color="Black",
-                    size=1,
-                    method=lm,
-                    se=FALSE)+
-        labs(title="Annual Count of PM2.5 data in EPA reports - US\n with Linear Trendline since Y1998")+
-        xlab("Year")+
-        ylab("Millions of Annual PM2.5 data reported")
-
-dev.off() # close png device
-##
-## verify PNG file exists and indicate its file.info()
-print(file.exists(myPNGfile))
-#> [1] TRUE
-print(file.info(myPNGfile))
-#> size isdir mode               mtime               ctime               atime exe
-#> plot0.png 6478 FALSE  666 2015-03-30 20:54:18 2015-03-30 20:52:23 2015-03-30 20:52:23  no
-#
-dfstat4<-mutate(dfstat,Missing.Ratio=Missing/Records,Localized.Ratio=Localized/Records)
-dfstat4<-dfstat4[,-(2:4)]
-dfstat5<-gather(dfstat4,"Ratios","Percentages",2,3)
-dfstat5<-group_by(dfstat5,Year)
-dfstat5<-as.data.frame(dfstat5)
-myPNGfile<-"plot1.png"
-png(filename=myPNGfile,width=480,height=480) ## open png device for plot1.png 480x480 pix
-ggplot (dfstat5,
-        aes(x=Year,y=Percentages*1e2,fill=Ratios))+
-        geom_bar(stat="identity")+
-        geom_hline(aes(yintercept=1e2*(sum(dfstat$Missing)/sum(dfstat$Records))))+
-        facet_wrap(~Ratios,ncol=1)+
-        labs(title="Percentage of US Sites Missing PM2.5 Data Records\nwith missing mean level since Y1998")+
-        xlab("Year")+
-        ylab("Percentage of US Sites Records reporting missing PM2.5 data")
-        
-dev.off() # close png device
-##
-## verify PNG file exists and indicate its file.info()
-print(file.exists(myPNGfile))
-#> [1] TRUE
-print(file.info(myPNGfile))
-#> size isdir mode               mtime               ctime               atime exe
-#> plot1.png 7608 FALSE  666 2015-03-30 21:54:04 2015-03-30 21:50:46 2015-03-30 21:50:46  no
-#
-myPNGfile<-"plot2.png"
-png(filename=myPNGfile,width=480,height=480) ## open png device for plot1.png 480x480 pix
+png(filename=myPNGfile,width=480,height=480) ## open png device for plot0.png 480x480 pix
 ggplot (dfstat,
         aes(Year,Records*1e-6))+
         geom_bar(stat="identity",
@@ -221,62 +266,135 @@ ggplot (dfstat,
                     size=1,
                     method=lm,
                     se=FALSE)+
-        labs(title="US Sites Records (in Millions) reporting missing PM2.5 data \n in Annual EPA reports\n with Linear Trendline since Y1998")+
+        labs(title="US Sites Records (in Millions) reporting missing PM2.5 data \n with Linear Trendline since Y1998")+
         xlab("Year")+
         ylab("Millions of Sites Records reporting missing PM2.5 data")
 dev.off() # close png device
-##
-## verify PNG file exists and indicate its file.info()
-print(file.exists(myPNGfile))
-#> [1] TRUE
+#
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot2.png 6378 FALSE  666 2015-03-28 21:39:38 2015-03-28 21:38:48 2015-03-28 21:38:48  no
+#> plot0.png 6116 FALSE  666 2015-04-01 20:17:28 2015-03-31 21:22:58 2015-03-31 21:22:58  no
 #
-stop()
+dfstat2<-mutate(dfstat,PM2.5.Reported=Records-Missing,Non.Mappable=Missing-Geolocalized)
+dfstat2A<-select(dfstat2,Year,PM2.5.Reported,Missing)   # for Missing vs Non-Missing plots
+dfstat3<-gather(dfstat2A,"Type","Count",2,3)
+dfstat3<-group_by(dfstat3,Year)
+dfstat3<-as.data.frame(dfstat3)
 #
-# pm25<-read.table(file="pm25.dat",header=TRUE,stringsAsFactors=FALSE)  # in case of power outage...
+myPNGfile<-"plot1A.png"
+png(filename=myPNGfile,width=480,height=480) ## open png device for plot1A.png 480x480 pix
+ggplot (data=dfstat3,
+        aes(x=Year,y=Count/1e6,fill=Type))+
+        geom_bar(stat="identity")+
+        stat_smooth(data=dfstat3[which(dfstat3$Year>=2008),],
+                    aes(x=Year,y=Count/1e6),
+                    color="Black",
+                    size=1,
+                    method=lm,
+                    se=FALSE)+
+        facet_wrap (~ Type,ncol=1)+
+        labs(title="Annual Count of US PM2.5 Data Reports - US\n with Linear Trendline since Y1998")+
+        xlab("Year")+
+        ylab("Millions of Annual PM2.5 Data Reported")
+
+dev.off() # close png device
 #
-selection<-select(pm25,year,Event.Type,Longitude,Latitude,State.Code,County.Code,Site.ID)
-by_year_Location_Event.Type<-group_by(selection,year,Longitude,Latitude,Event.Type)
-display1<-summarize(by_year_Location_Event.Type,Events=n())
+print(file.info(myPNGfile))
+#> size isdir mode               mtime               ctime               atime exe
+#> plot1A.png 7455 FALSE  666 2015-04-01 20:17:29 2015-03-31 22:46:02 2015-03-31 22:46:02  no
+#
+dfstat2B<-select(dfstat2,Year,Geolocalized,Non.Mappable) # for Geolocalized vs Non.Mappable
+dfstat3<-gather(dfstat2B,"Type","Count",2,3)
+dfstat3<-group_by(dfstat3,Year)
+dfstat3<-as.data.frame(dfstat3)
+#
+myPNGfile<-"plot1B.png"
+png(filename=myPNGfile,width=480,height=480) ## open png device for plot1B.png 480x480 pix
+ggplot (data=dfstat3,
+        aes(x=Year,y=Count/1e6,fill=Type))+
+        geom_bar(stat="identity")+
+        stat_smooth(data=dfstat3[which(dfstat3$Year>=2008),],
+                    aes(x=Year,y=Count/1e6),
+                    color="Black",
+                    size=1,
+                    method=lm,
+                    se=FALSE)+
+        facet_wrap (~ Type,ncol=1)+
+        labs(title="Annual Count of US Missing PM2.5 Data Reports - US\n with Linear Trendline since Y1998")+
+        xlab("Year")+
+        ylab("Millions of Annual PM2.5 Missing Data Reported")
+
+dev.off() # close png device
+#
+print(file.info(myPNGfile))
+#> size isdir mode               mtime               ctime               atime exe
+#> plot1B.png 7974 FALSE  666 2015-04-01 20:17:30 2015-03-31 22:46:02 2015-03-31 22:46:02  no
+#
+dfstat4<-mutate(dfstat,Missing.Ratio=Missing/Records,Geolocalized.Ratio=Geolocalized/Records)
+dfstat4<-dfstat4[,-(2:4)]
+dfstat5<-gather(dfstat4,"Ratios","Percentages",2,3)
+dfstat5<-group_by(dfstat5,Year)
+dfstat5<-as.data.frame(dfstat5)
+myPNGfile<-"plot2.png"
+png(filename=myPNGfile,width=480,height=480) ## open png device for plot2.png 480x480 pix
+ggplot (dfstat5,
+        aes(x=Year,y=Percentages*1e2,fill=Ratios))+
+        geom_bar(stat="identity")+
+        geom_hline(aes(yintercept=1e2*(sum(dfstat$Missing)/sum(dfstat$Records))))+
+        facet_wrap(~Ratios,ncol=1)+
+        labs(title="Missing PM2.5 Data Records % - US\nwith Average Missing % Level since Y1998")+
+        xlab("Year")+
+        ylab("% of US Missing PM2.5 Data Records")
+        
+dev.off() # close png device
+#
+print(file.info(myPNGfile))
+#> size isdir mode               mtime               ctime               atime exe
+#> plot2.png 7160 FALSE  666 2015-04-01 20:23:20 2015-04-01 20:17:30 2015-04-01 20:17:30  no
+#
+rm(dfstat2A,dfstat2B,dfstat3,dfstat4,dfstat5)
+#
+dfstat2<-select(pm25,Year,Event.Type,State.Name,County.Name)
+by_year_Event.Type<-group_by(dfstat2,Year,Event.Type)
+dfstat3<-summarize(by_year_Event.Type,Events=n())
+dfstat3<-as.data.frame(dfstat3)
 myPNGfile<-"plot2A.png"
 png(filename=myPNGfile,width=480,height=480) ## open png device for plot1.png 480x480 pix
-by_year_Event.Type<-group_by(display1,year,Event.Type,Events)
-display2<-summarize(by_year_Event.Type,All.Events=sum(Events))
-ggplot (display2,
-        aes(year,y=All.Events/1e6))+
+ggplot (dfstat3,
+        aes(x=Year,y=Events/1e3))+
         geom_bar(stat="identity",
                  color="blue",fill="blue")+
-        stat_smooth(data=display2,
-                    aes(x=year,y=All.Events/1e6,group=1),
+        stat_smooth(data=dfstat3[which(dfstat3$Year>=2008),],
+                    aes(x=Year,y=Events/1e3,group=1),
                     fill="blue",
                     color="orange",
                     size=1,
                     method=lm,
                     se=FALSE)+
         facet_wrap(~Event.Type)+
-        labs(title="US Sites (in thousands) reporting missing PM2.5 data \n in Annual EPA reports by Event Type\n with Linear Trendline since Y1999")+
+        labs(title="Geolocalized US Sites (in Thousandss) Reporting Missing PM2.5 Data \nCategorized by Event Type\n with Linear Trendline since Y2008")+
         xlab("Year")+
-        ylab("Thousands Sites reporting missing PM2.5 data")
+        ylab("Thousands of US Geolocalized Sites Reporting Missing PM2.5 Data")
 dev.off() # close png device
-##
-## verify PNG file exists and indicate its file.info()
-print(file.exists(myPNGfile))
-#> [1] TRUE
+#
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot2.png 6738 FALSE  666 2015-03-26 20:24:18 2015-03-26 20:23:21 2015-03-26 20:23:21  no
-stop()
-display1.D<-display1[display1$Group=="D",];display1.D<-display1.D[,-4]
-display1.L<-display1[display1$Group=="L",];display1.L<-display1.L[,-4]
-display1.N<-display1[display1$Group=="N",];display1.N<-display1.N[,-4]
-display1.O<-display1[display1$Group=="O",];display1.O<-display1.O[,-4]
-display1.Q<-display1[display1$Group=="Q",];display1.Q<-display1.Q[,-4]
-display1<-display1[,-4]
-by_year_Location<-group_by(display1,year,Longitude,Latitude)
-display2<-summarize(by_year_Location,all.events=sum(events))
-display2$year<-factor(display2$year)
+#> plot2A.png 8361 FALSE  666 2015-04-01 20:26:13 2015-04-01 20:26:13 2015-04-01 20:26:22  no
+#
+#dfstat3.D<-dfstat3[dfstat3$Event.Type=="D",];dfstat3.D<-dfstat3.D[,-4]
+#dfstat3.L<-dfstat3[dfstat3$Event.Type=="L",];dfstat3.L<-dfstat3.L[,-4]
+#dfstat3.N<-dfstat3[dfstat3$Event.Type=="N",];dfstat3.N<-dfstat3.N[,-4]
+#dfstat3.O<-dfstat3[dfstat3$Event.Type=="O",];dfstat3.O<-dfstat3.O[,-4]
+#dfstat3.Q<-dfstat3[dfstat3$Event.Type=="Q",];dfstat3.Q<-dfstat3.Q[,-4]
+#dfstat3<-dfstat3[,-4]
+#by_year_Location<-group_by(dfstat3,Year,Longitude,Latitude)
+#dfstat4<-summarize(by_year_Location,all.events=sum(Events))
+#dfstat4<-as.data.frame(dfstat4)
+#
+dfstat2<-select(pm25,Year,Event.Type,State.Name,County.Name,Longitude,Latitude)
+by_year_Event.Type<-group_by(dfstat2,Year,Event.Type,State.Name,County.Name,Longitude,Latitude)
+dfstat3<-summarize(by_year_Event.Type,Events=n())
+dfstat3<-as.data.frame(dfstat3)
 ##
 ## we want to chart the coordinates on the map after summation and use
 ## a color chart to indicate density
@@ -289,23 +407,41 @@ library(mapproj)
 library(rworldmap)
 myPNGfile<-"plot3A.png"
 png(filename=myPNGfile,width=2560,height=2560)        # open png device for plot1.png 480x480 pix
-USAmap<-get_map('United States',zoom=4)
+USAmap<-get_map('United States',zoom=4,maptype="toner-lite")
 ggmap(USAmap,extent='device',color='bw',legend='bottomright')+
         scale_color_brewer(palette="Accent")+
-        geom_point(aes(x=Longitude, y=Latitude, size=events, color=Group), data=display0)+
-        facet_wrap(~year)+
+        geom_point(aes(x=Longitude, y=Latitude, size=Events, color=Event.Type), data=dfstat3)+
+        facet_wrap(~Year)+
         labs(title="US Locations of Missing PM_25 Emission data 1998-2013/na All Missing Data Codes Reported")
 dev.off() # close png device
 ##
-## verify PNG file exists and indicate its file.info()
-print(file.exists(myPNGfile))
-#> [1] TRUE
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot2.png 7081 FALSE  666 2015-03-22 10:35:03 2015-03-16 20:20:57 2015-03-16 20:20:57  nomyPNGfile<-"plot3D.png"myPNGfile<-"plot3.png"
-colnames(display1)[4]<-"level"
-data3d<-display1[,2:4]
-data3d<-cbind(data3d,display1[,1])
+#> plot3A.png 804742 FALSE  666 2015-04-01 21:00:42 2015-04-01 20:52:50 2015-04-01 20:52:50  no
+#
+library(reshape2) # for melt
+by_Event.Type<-group_by(dfstat2,Event.Type,State.Name)
+dfstat4<-summarize(by_Event.Type,Events=n())
+dfstat4<-as.data.frame(dfstat4)
+colnames(dfstat4)<-c("Type","state","Count")
+dfstat4$state = tolower(dfstat4$state)
+myPNGfile<-"plot3B.png"
+png(filename=myPNGfile,width=2560,height=2560)        # open png device for plot1.png 480x480 pix
+if (require(maps)) {
+        states_map <- map_data("state")
+        ggplot(dfstat4, aes(map_id = state)) + geom_map(aes(fill = D), map = states_map) + expand_limits(x = states_map$long, y = states_map$lat) + theme(legend.position='bottomright')
+                last_plot() + coord_map()  
+        ggplot(dfstat4, aes(map_id = state)) + geom_map(aes(fill = Count), map = states_map) + expand_limits(x = states_map$long, y = states_map$lat)  +
+                facet_wrap( ~ Type) + 
+                labs(title="US Locations of Missing PM_25 Emission data 1998-2013/na All Missing Data Codes Reported") 
+}
+dev.off() # close png device
+##
+print(file.info(myPNGfile))
+#> size isdir mode               mtime               ctime               atime exe
+#> plot3B.png 107623 FALSE  666 2015-04-01 23:49:42 2015-04-01 23:48:53 2015-04-01 23:48:53  no
+#
+stop()
 myPNGfile<-"plot3.png"
 png(filename=myPNGfile,width=2560,height=2560)        # open png device for plot1.png 480x480 pix
 USAmap<-get_map('United States',zoom=4)
