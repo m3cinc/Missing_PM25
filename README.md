@@ -11,11 +11,13 @@ data worth mining in these, so I developed this script to attempt an answer at..
 What can be determined from PM25 missing data? Specifically between 1998-2013:
 
         1) What is the trend globally in US and by state?
-        2) How is the spatial distribution of these events evolving in absolute and relative terms?
-        3) More than 50 different values are assigned in the Null.Data.Code table.
-        Can they be regrouped in 5 event groups: Limits Exceeded, Quality ,Damage ,Operator and Uncontrollable?
-        4) How is the spatial distribution of these events evolving in absolute and relative terms?
-
+           In absolute and relative amount, quantify and categorize Records, Missing, Geolocalized data.
+ 
+        2) Regrouping the more than 50 different values assigned for Missing PM2.5 Null.Data.Code data
+           in 5 event groups: [D]amage, [L]imits Exceeded, [O]perator, [Q]uality and [N]on-controllable,
+           How is the spatial distribution of these events evolving in absolute and relative terms,
+           At the US states, county and geopositions levels?
+           
  Type 1 PM2.5 data files available at the US EPA web site address: http://www.epa.gov/ttn/airs/airsaqs/detaildata/downloadaqsdata.htm: RD_501_88101_YYYY-0.txt contain the PM2.5 data.
  
  Type 2 Annual reports between 1999 and 2013 at the US EPA web site address: http://aqsdr1.epa.gov/aqsweb/aqstmp/airdata/download_files.html#Annual: annual_all_YYYY.zip contain also the geolocalization for all the EPA sites. After extraction, we used annual_all_YYYY.csv files (Type 3)
