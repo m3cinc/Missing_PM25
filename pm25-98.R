@@ -10,11 +10,12 @@
 # What can be determined from PM25 missing data? Specifically between 1998-2013:
 #
 # 1) What is the trend globally in US and by state?
-# 2) How is the spatial distribution of these events evolving in absolute and relative terms?
-# 3) As more than 50 different values are assigned in the Null.Data.Code, can they be regrouped
-#    in 5 event groups: Limits Exceeded, Quality ,Damage ,Operator and Uncontrollable?
-# 4) How is the spatial distribution of these events evolving in absolute and
-#    relative terms?
+#    In absolute and relative amount, quantify and categorize Records, Missing, Geolocalized data.
+# 
+# 2) Regrouping the more than 50 different values assigned for Missing PM2.5 Null.Data.Code data
+#    in 5 event groups: [D]amage, [L]imits Exceeded, [O]perator, [Q]uality and [N]on-controllable,
+#    How is the spatial distribution of these events evolving in absolute and relative terms,
+#    At the US states, county and geopositions levels?
 #
 # PM2.5 data files available at the US EPA web site
 # address: http://www.epa.gov/ttn/airs/airsaqs/detaildata/downloadaqsdata.htm
@@ -33,14 +34,23 @@
 #
 #install.packages("lubridate")
 #install.packages("RCurl") # needed to handle Certified (SSL) URL
+#install.packages("data.table") # for faster mergeing
+#install.packages("ggmap")
+#install.packages("mapproj")
+#install.packages("rworldmap")
+#
 library(lubridate)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(RCurl)
+library(data.table)
+library(ggmap)
+library(mapproj)
+library(rworldmap)
 #
 download.flag<-FALSE    # TRUE for URL download, FALSE for Local data read
-savefile.flag<-FALSE    # TRUE for local save (in case of power failures...)
+savefile.flag<-TRUE    # TRUE for local save (in case of power failures...)
 #
 url1A<-"http://www.epa.gov/ttn/airs/airsaqs/detaildata/501files/Rd_501_88101_YYYY.Zip"
 url1B<-"http://www.epa.gov/ttn/airs/airsaqs/detaildata/501files/RD_501_88101_YYYY.zip"
@@ -141,7 +151,11 @@ updateStateCode <- function(x) {
         x[x==7]<-NA         # Panama Canal
         x
 }
-
+#
+# helper to strip 'county' ending of the County.Name
+stripCounty <- function(x) {
+        x<-gsub(" County","",x)
+}
 #
 # start with building the Qualifiers data frame
 #
@@ -151,11 +165,11 @@ code.N<-c('AO','AP','AV','AW','SA')
 code.O<-c('AB','AF','AL','AM','AQ','AR','AU','BB','BG','BH','BJ')
 code.Q<-c('AI','AS','AT','AX','AY','AZ','BC','BD','BF','BL','BM','CS','DA','MB','ST','TC','XX')
 codes<-c(code.D,code.L,code.N,code.O,code.Q)
-type<-c(rep('D',length(code.D)),
-        rep('L',length(code.L)),
-        rep('N',length(code.N)),
-        rep('O',length(code.O)),
-        rep('Q',length(code.Q)))
+type<-c(rep('Damage Causes',length(code.D)),
+        rep('Limits Exceeded',length(code.L)),
+        rep('Non-Controllable',length(code.N)),
+        rep('Operators',length(code.O)),
+        rep('Quality Related',length(code.Q)))
 q.group<-cbind(codes,type)
 # retrieve info using url or locally
 filename<-"QualifierCodesNULL.csv"
@@ -217,6 +231,8 @@ colnames(County.Info)<-c("State.Abr","County.Code","County.Name")
 County.Info<-merge(County.Info,States.Info,by="State.Abr")
 # now make a key for mergeing
 County.Info<-mutate(County.Info,key=paste(State.Code,County.Code,sep=":"))
+# trim the County.Name to bare name
+County.Info$County.Name<-sapply(County.Info$County.Name,stripCounty)
 #
 rm(appendix,filename,url4,url5A,url5B,url5C,url5D,url5E,url5F,url5G)    # cleanup
 #
@@ -359,7 +375,7 @@ by_year_Event.Type<-group_by(dfstat2,Year,Event.Type)
 dfstat3<-summarize(by_year_Event.Type,Events=n())
 dfstat3<-as.data.frame(dfstat3)
 myPNGfile<-"plot2A.png"
-png(filename=myPNGfile,width=480,height=480) ## open png device for plot1.png 480x480 pix
+png(filename=myPNGfile,width=480,height=480) ## open png device for plot2A.png 480x480 pix
 ggplot (dfstat3,
         aes(x=Year,y=Events/1e3))+
         geom_bar(stat="identity",
@@ -381,59 +397,44 @@ print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
 #> plot2A.png 8361 FALSE  666 2015-04-01 20:26:13 2015-04-01 20:26:13 2015-04-01 20:26:22  no
 #
-#dfstat3.D<-dfstat3[dfstat3$Event.Type=="D",];dfstat3.D<-dfstat3.D[,-4]
-#dfstat3.L<-dfstat3[dfstat3$Event.Type=="L",];dfstat3.L<-dfstat3.L[,-4]
-#dfstat3.N<-dfstat3[dfstat3$Event.Type=="N",];dfstat3.N<-dfstat3.N[,-4]
-#dfstat3.O<-dfstat3[dfstat3$Event.Type=="O",];dfstat3.O<-dfstat3.O[,-4]
-#dfstat3.Q<-dfstat3[dfstat3$Event.Type=="Q",];dfstat3.Q<-dfstat3.Q[,-4]
-#dfstat3<-dfstat3[,-4]
-#by_year_Location<-group_by(dfstat3,Year,Longitude,Latitude)
-#dfstat4<-summarize(by_year_Location,all.events=sum(Events))
-#dfstat4<-as.data.frame(dfstat4)
-#
 dfstat2<-select(pm25,Year,Event.Type,State.Name,County.Name,Longitude,Latitude)
 by_year_Event.Type<-group_by(dfstat2,Year,Event.Type,State.Name,County.Name,Longitude,Latitude)
 dfstat3<-summarize(by_year_Event.Type,Events=n())
 dfstat3<-as.data.frame(dfstat3)
+dfstat3<-mutate(dfstat3,Event.Magnitude=round(1.5+log10(Events)))
 ##
 ## we want to chart the coordinates on the map after summation and use
 ## a color chart to indicate density
-#install.packages("ggmap")
-#install.packages("mapproj")
-#install.packages("rworldmap")
-#install.packages("RColorBrewer")
-library(ggmap)
-library(mapproj)
-library(rworldmap)
 myPNGfile<-"plot3A.png"
-png(filename=myPNGfile,width=2560,height=2560)        # open png device for plot1.png 480x480 pix
+png(filename=myPNGfile,width=2560,height=2560)        # open png device for plot3A.png 2560x2560 pix
 USAmap<-get_map('United States',zoom=4,maptype="toner-lite")
-ggmap(USAmap,extent='device',color='bw',legend='bottomright')+
-        scale_color_brewer(palette="Accent")+
-        geom_point(aes(x=Longitude, y=Latitude, size=Events, color=Event.Type), data=dfstat3)+
+ggmap(USAmap,extent='device',color='bw')+
+        scale_color_manual(values=c("dark blue","orange","red","dark green","light blue"))+
+        geom_point(data=dfstat3, aes(x=Longitude, y=Latitude, color=Event.Type, size=Event.Magnitude, alpha=0.2))+
         facet_wrap(~Year)+
-        labs(title="US Locations of Missing PM_25 Emission data 1998-2013/na All Missing Data Codes Reported")
+        labs(title="US Locations of Missing PM_25 Emission Records 1998-2013\nAll Missing Data Codes Reported")
 dev.off() # close png device
 ##
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot3A.png 804742 FALSE  666 2015-04-01 21:00:42 2015-04-01 20:52:50 2015-04-01 20:52:50  no
+#> plot3A.png 390469 FALSE  666 2015-04-02 11:37:31 2015-04-02 11:31:28 2015-04-02 11:31:28  no
 #
-library(reshape2) # for melt
 by_Event.Type<-group_by(dfstat2,Event.Type,State.Name)
 dfstat4<-summarize(by_Event.Type,Events=n())
 dfstat4<-as.data.frame(dfstat4)
 colnames(dfstat4)<-c("Type","state","Count")
+dfstat4<-mutate(dfstat4,logCount=log10(Count))
 dfstat4$state = tolower(dfstat4$state)
 myPNGfile<-"plot3B.png"
-png(filename=myPNGfile,width=2560,height=2560)        # open png device for plot1.png 480x480 pix
+png(filename=myPNGfile,width=1920,height=1280)        # open png device for plot3B.png 1920x1280 pix
 if (require(maps)) {
-        states_map <- map_data("state")
-        ggplot(dfstat4, aes(map_id = state)) + geom_map(aes(fill = D), map = states_map) + expand_limits(x = states_map$long, y = states_map$lat) + theme(legend.position='bottomright')
-                last_plot() + coord_map()  
-        ggplot(dfstat4, aes(map_id = state)) + geom_map(aes(fill = Count), map = states_map) + expand_limits(x = states_map$long, y = states_map$lat)  +
-                facet_wrap( ~ Type) + 
-                labs(title="US Locations of Missing PM_25 Emission data 1998-2013/na All Missing Data Codes Reported") 
+        states_map<-map_data("state")
+        ggplot(dfstat4,aes(map_id=state))+
+                geom_map(aes(fill=0),map=states_map)+expand_limits(x=states_map$long,y=states_map$lat)
+        last_plot()+coord_map()
+        ggplot(dfstat4,aes(map_id=state))+geom_map(aes(fill=logCount),map=states_map)+expand_limits(x=states_map$long,y=states_map$lat)+
+        facet_wrap(~ Type)+
+        labs(title="US Locations of Missing PM_25 Emission Records 1998-2013\nAll Missing Data Codes Reported") 
 }
 dev.off() # close png device
 ##
@@ -441,127 +442,142 @@ print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
 #> plot3B.png 107623 FALSE  666 2015-04-01 23:49:42 2015-04-01 23:48:53 2015-04-01 23:48:53  no
 #
-stop()
+by_Event.Type2<-group_by(dfstat2,Event.Type,State.Name,County.Name)
+dfstat6<-summarize(by_Event.Type2,Events=n())
+dfstat6<-as.data.frame(dfstat6)
+colnames(dfstat6)<-c("Type","state","county","Count")
+dfstat6$state = tolower(dfstat6$state)
+dfstat6$county=tolower(dfstat6$county)
+dfstat6<-mutate(dfstat6,logCount=log10(Count))
+myPNGfile<-"plot3C.png"
+png(filename=myPNGfile,width=1920,height=1280)        # open png device for plot3B.png 1920x1280 pix
+if (require(maps)) {
+        map.county<-map_data('county')
+        counties<-unique(map.county[,5:6])
+        map.county<-data.table(map_data('county'))
+        setkey(map.county,region,subregion)
+        my_map<-data.frame(region=counties$region,
+                           subregion=counties$subregion)
+        dfstat7<-rename(dfstat6,region=state,subregion=county)
+        dfstat7<-data.table(dfstat7)
+        setkey(dfstat7,region,subregion)
+        my_map<-data.table(my_map)
+        my_map<-left_join(my_map,dfstat7,by=c("region","subregion"))
+        my_map<-my_map[!is.na(my_map$Type),]
+        setkey(my_map,region,subregion)
+        my_map<-left_join(map.county,my_map,by=c("region","subregion"))
+        my_map$Count[is.na(my_map$Count)]<-0
+        my_map$logCount[is.na(my_map$logCount)]<-0
+        levels(my_map$Type)<-append(levels(my_map$Type),"None Missing")
+        my_map$Type[is.na(my_map$Type)]<-"None Missing"
+        states_map<-map_data("county")
+        ggplot(states_map,aes(x=long,y=lat,group=group,fill=logCount))+geom_polygon()
+        last_plot()+coord_map()
+        ggplot(my_map,aes(x=long,y=lat,group=group,fill=logCount))+geom_polygon()+
+        facet_wrap(~ Type)+
+        labs(title="US Locations of Missing PM_25 Emission Records 1998-2013\nAll Missing Data Codes Reported") 
+}
+dev.off() # close png device
+#
+print(file.info(myPNGfile))
+#> size isdir mode               mtime               ctime               atime exe
+#> plot3C.png 149812 FALSE  666 2015-04-03 19:35:25 2015-04-03 19:34:08 2015-04-03 19:34:08  no
+#
+dfstat6<-dfstat6[,-5]
+by_state_Type<-group_by(dfstat6,state,Type)
+dfstat6<-summarize(by_state_Type,StateCount=sum(Count))
+dfstat6$PercentCount<-100*dfstat6$StateCount/sum(dfstat6$StateCount)
+myPNGfile<-"plot3D.png"
+png(filename=myPNGfile,width=1920,height=1280)        # open png device for plot3B.png 1920x1280 pix
+if (require(maps)) {
+        states_map<-map_data("state")
+        ggplot(dfstat6,aes(map_id=state))+
+                geom_map(aes(fill=0),map=states_map)+expand_limits(x=states_map$long,y=states_map$lat)
+        last_plot()+coord_map()
+        ggplot(dfstat6,aes(map_id=state))+geom_map(aes(fill=PercentCount),map=states_map)+expand_limits(x=states_map$long,y=states_map$lat)+
+                facet_wrap(~ Type)+
+                labs(title="PM_25 Emission Records 1998-2013 US Locations Categorized by State\nPercentages of All Data Reported") 
+}
+dev.off() # close png device
+##
+print(file.info(myPNGfile))
+#> size isdir mode               mtime               ctime               atime exe
+#> plot3B.png 107623 FALSE  666 2015-04-01 23:49:42 2015-04-01 23:48:53 2015-04-01 23:48:53  no
+#
+dfstat8<-data.frame(dfstat7)
+dfstat8<-dfstat8[,-5]
+dfstat8$PercentCount<-100*dfstat8$Count/sum(dfstat8$Count)
+myPNGfile<-"plot3E.png"
+png(filename=myPNGfile,width=1920,height=1280)        # open png device for plot3B.png 1920x1280 pix
+if (require(maps)) {
+        map.county<-map_data('county')
+        counties<-unique(map.county[,5:6])
+        map.county<-data.table(map_data('county'))
+        setkey(map.county,region,subregion)
+        my_map<-data.frame(region=counties$region,
+                           subregion=counties$subregion)
+        my_map<-data.table(my_map)
+        dfstat8<-data.table(dfstat8)
+        my_map<-left_join(my_map,dfstat8,by=c("region","subregion"))
+        my_map<-my_map[!is.na(my_map$Type),]
+        setkey(my_map,region,subregion)
+        my_map<-left_join(map.county,my_map,by=c("region","subregion"))
+        my_map$Count[is.na(my_map$Count)]<-0
+        my_map$PercenCount[is.na(my_map$PercentCount)]<-0
+        levels(my_map$Type)<-append(levels(my_map$Type),"None Missing")
+        my_map$Type[is.na(my_map$Type)]<-"None Missing"
+        states_map<-map_data("county")
+        ggplot(states_map,aes(x=long,y=lat,group=group,fill=PercentCount))+geom_polygon()
+        last_plot()+coord_map()
+        ggplot(my_map,aes(x=long,y=lat,group=group,fill=PercentCount))+geom_polygon()+
+                facet_wrap(~ Type)+
+                labs(title="PM_25 Emission Records 1998-2013 US Locations Categorized by County\nPercentages of All Data Reported") 
+}
+dev.off() # close png device
+#
+print(file.info(myPNGfile))
+#> size isdir mode               mtime               ctime               atime exe
+#> plot3E.png 106080 FALSE  666 2015-04-03 21:17:26 2015-04-03 21:16:10 2015-04-03 21:16:10  no
+#
 myPNGfile<-"plot3.png"
-png(filename=myPNGfile,width=2560,height=2560)        # open png device for plot1.png 480x480 pix
-USAmap<-get_map('United States',zoom=4)
-ggmap(USAmap,extent='device',color='bw',legend='bottomright')+
-        stat_density2d(aes(x=Longitude, y=Latitude, fill=..level..,alpha=..level..),
-                       size=1,bins=10,contour=TRUE,geom='polygon', data=data3d)+
-        scale_alpha(range=c(.1,.9),guide=FALSE)+
-        guides(fill=guide_colorbar(barwidth=5,barheight=30))+
-        facet_wrap(~year)+
-        labs(title="US Locations of Missing PM_25 Emission data 1998-2013/na All Missing Data Codes Reported")
+png(filename=myPNGfile,width=1280,height=1280)        # open png device for plot3.png 480x480 pix
+USAmap<-get_map('Ohio',zoom=8,maptype="toner-lite")
+ggmap(USAmap,extent='device',color='bw')+
+        scale_color_manual(values=c("dark blue","orange","red","dark green","light blue"))+
+        geom_point(data=dfstat3, aes(x=Longitude, y=Latitude, color=Event.Type, size=Event.Magnitude))+
+        facet_wrap(~Year)+
+        labs(title="Ohio Locations of Missing PM_25 Emission Records 1998-2013\nAll Missing Data Codes Reported")
 dev.off() # close png device
 ##
-## verify PNG file exists and indicate its file.info()
-print(file.exists(myPNGfile))
-#> [1] TRUE
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot2.png 7081 FALSE  666 2015-03-22 10:35:03 2015-03-16 20:20:57 2015-03-16 20:20:57  nomyPNGfile<-"plot3D.png"
-colnames(display1)[4]<-"level"
-data3d<-display1.D[,2:4]
-data3d<-cbind(data3d,display1.D[,1])
-myPNGfile<-"plot3D.png"
-png(filename=myPNGfile,width=2560,height=2560)        # open png device for plot1.png 480x480 pix
-USAmap<-get_map('United States',zoom=4)
-ggmap(USAmap,extent='device',color='bw',legend='bottomright')+
-        stat_density2d(aes(x=Longitude, y=Latitude, fill=..level..,alpha=..level..),
-                       size=2,bins=10, data=data3d, geom='polygon')+
-        scale_alpha(range=c(.1,.9),guide=FALSE)+
-        guides(fill=guide_colorbar(barwidth=5,barheight=30))+
-        facet_wrap(~year)+
-        labs(title="US Locations of Missing PM_25 Emission data 1999-2013/nMissing Data Code reports linked to DAMAGES")
+#> plot3.png 252272 FALSE  666 2015-04-02 14:02:41 2015-04-02 13:59:44 2015-04-02 13:59:44  no
+#
+myPNGfile<-"plot4.png"
+png(filename=myPNGfile,width=1280,height=1280)        # open png device for plot3.png 480x480 pix
+USAmap<-get_map('Ohio',zoom=9,maptype="toner-hybrid")
+ggmap(USAmap,extent='device',color='bw')+
+        scale_color_manual(values=c("dark blue","orange","red","dark green","light blue"))+
+        geom_point(data=dfstat3, aes(x=Longitude, y=Latitude, color=Event.Type, size=Event.Magnitude))+
+        facet_wrap(~Year)+
+        labs(title="Ohio Locations of Missing PM_25 Emission Records 1998-2013\nAll Missing Data Codes Reported")
 dev.off() # close png device
 ##
-## verify PNG file exists and indicate its file.info()
-print(file.exists(myPNGfile))
-#> [1] TRUE
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot2.png 7081 FALSE  666 2015-03-22 10:35:03 2015-03-16 20:20:57 2015-03-16 20:20:57  no
-colnames(display1)[4]<-"level"
-data3d<-display1.L[,2:4]
-data3d<-cbind(data3d,display1.L[,1])
-myPNGfile<-"plot3D.png"
-png(filename=myPNGfile,width=2560,height=2560)        # open png device for plot1.png 480x480 pix
-USAmap<-get_map('United States',zoom=4)
-ggmap(USAmap,extent='device',color='bw',legend='bottomright')+
-        stat_density2d(aes(x=Longitude, y=Latitude, fill=..level..,alpha=..level..),
-                       size=2,bins=10, data=data3d, geom='polygon')+
-        scale_alpha(range=c(.1,.9),guide=FALSE)+
-        guides(fill=guide_colorbar(barwidth=5,barheight=30))+
-        facet_wrap(~year)+
-        labs(title="US Locations of Missing PM_25 Emission data 1999-2013/nMissing Data Code reports linked to OUT-OF-LIMITS")
+#> plot3.png 252272 FALSE  666 2015-04-02 14:02:41 2015-04-02 13:59:44 2015-04-02 13:59:44  no
+#
+myPNGfile<-"plot4A.png"
+png(filename=myPNGfile,width=1280,height=1280)        # open png device for plot3.png 480x480 pix
+USAmap<-get_map('Baltimore, MD',zoom=12,maptype="toner-hybrid")
+ggmap(USAmap,extent='device',color='bw')+
+        scale_color_manual(values=c("dark blue","orange","red","dark green","light blue"))+
+        geom_point(data=dfstat3, aes(x=Longitude, y=Latitude, color=Event.Type, size=Event.Magnitude))+
+        facet_wrap(~Year)+
+        labs(title="Baltimore, MD Locations of Missing PM_25 Emission Records 1998-2013\nAll Missing Data Codes Reported")
 dev.off() # close png device
 ##
-## verify PNG file exists and indicate its file.info()
-print(file.exists(myPNGfile))
-#> [1] TRUE
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot2.png 7081 FALSE  666 2015-03-22 10:35:03 2015-03-16 20:20:57 2015-03-16 20:20:57  no
-colnames(display1)[4]<-"level"
-data3d<-display1.N[,2:4]
-data3d<-cbind(data3d,display1.N[,1])
-myPNGfile<-"plot3N.png"
-png(filename=myPNGfile,width=2560,height=2560)        # open png device for plot1.png 480x480 pix
-USAmap<-get_map('United States',zoom=4)
-ggmap(USAmap,extent='device',color='bw',legend='bottomright')+
-        stat_density2d(aes(x=Longitude, y=Latitude, fill=..level..,alpha=..level..),
-                       size=2,bins=10, data=data3d, geom='polygon')+
-        scale_alpha(range=c(.1,.9),guide=FALSE)+
-        guides(fill=guide_colorbar(barwidth=5,barheight=30))+
-        facet_wrap(~year)+
-        labs(title="US Locations of Missing PM_25 Emission data 1999-2013/nMissing Data Code reports linked to NON-CONTROLLABLE EVENTS")
-dev.off() # close png device
-##
-## verify PNG file exists and indicate its file.info()
-print(file.exists(myPNGfile))
-#> [1] TRUE
-print(file.info(myPNGfile))
-#> size isdir mode               mtime               ctime               atime exe
-#> plot2.png 7081 FALSE  666 2015-03-22 10:35:03 2015-03-16 20:20:57 2015-03-16 20:20:57  no
-colnames(display1)[4]<-"level"
-data3d<-display1.O[,2:4]
-data3d<-cbind(data3d,display1.O[,1])
-myPNGfile<-"plot3D.png"
-png(filename=myPNGfile,width=2560,height=2560)        # open png device for plot1.png 480x480 pix
-USAmap<-get_map('United States',zoom=4)
-ggmap(USAmap,extent='device',color='bw',legend='bottomright')+
-        stat_density2d(aes(x=Longitude, y=Latitude, fill=..level..,alpha=..level..),
-                       size=2,bins=10, data=data3d, geom='polygon')+
-        scale_alpha(range=c(.1,.9),guide=FALSE)+
-        guides(fill=guide_colorbar(barwidth=5,barheight=30))+
-        facet_wrap(~year)+
-        labs(title="US Locations of Missing PM_25 Emission data 1999-2013/nMissing Data Code reports linked to OPERATOR")
-dev.off() # close png device
-##
-## verify PNG file exists and indicate its file.info()
-print(file.exists(myPNGfile))
-#> [1] TRUE
-print(file.info(myPNGfile))
-#> size isdir mode               mtime               ctime               atime exe
-#> plot2.png 7081 FALSE  666 2015-03-22 10:35:03 2015-03-16 20:20:57 2015-03-16 20:20:57  no
-colnames(display1)[4]<-"level"
-data3d<-display1.Q[,2:4]
-data3d<-cbind(data3d,display1.Q[,1])
-myPNGfile<-"plot3D.png"
-png(filename=myPNGfile,width=2560,height=2560)        # open png device for plot1.png 480x480 pix
-USAmap<-get_map('United States',zoom=4)
-ggmap(USAmap,extent='device',color='bw',legend='bottomright')+
-        stat_density2d(aes(x=Longitude, y=Latitude, fill=..level..,alpha=..level..),
-                       size=2,bins=10, data=data3d, geom='polygon')+
-        scale_alpha(range=c(.1,.9),guide=FALSE)+
-        guides(fill=guide_colorbar(barwidth=5,barheight=30))+
-        facet_wrap(~year)+
-        labs(title="US Locations of Missing PM_25 Emission data 1999-2013/nMissing Data Code reports linked to QUALITY")
-dev.off() # close png device
-##
-## verify PNG file exists and indicate its file.info()
-print(file.exists(myPNGfile))
-#> [1] TRUE
-print(file.info(myPNGfile))
-#> size isdir mode               mtime               ctime               atime exe
-#> plot2.png 7081 FALSE  666 2015-03-22 10:35:03 2015-03-16 20:20:57 2015-03-16 20:20:57  no
+#> plot4.png 205684 FALSE  666 2015-04-02 14:15:53 2015-04-02 14:14:07 2015-04-02 14:14:07  no
+#
