@@ -289,7 +289,7 @@ dev.off() # close png device
 #
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot0.png 6116 FALSE  666 2015-04-01 20:17:28 2015-03-31 21:22:58 2015-03-31 21:22:58  no
+#> plot0.png 6116 FALSE  666 2015-04-03 22:18:30 2015-04-03 21:30:14 2015-04-03 21:30:14  no
 #
 dfstat2<-mutate(dfstat,PM2.5.Reported=Records-Missing,Non.Mappable=Missing-Geolocalized)
 dfstat2A<-select(dfstat2,Year,PM2.5.Reported,Missing)   # for Missing vs Non-Missing plots
@@ -317,7 +317,7 @@ dev.off() # close png device
 #
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot1A.png 7455 FALSE  666 2015-04-01 20:17:29 2015-03-31 22:46:02 2015-03-31 22:46:02  no
+#> plot1A.png 7455 FALSE  666 2015-04-03 22:18:31 2015-04-03 21:30:14 2015-04-03 21:30:14  no
 #
 dfstat2B<-select(dfstat2,Year,Geolocalized,Non.Mappable) # for Geolocalized vs Non.Mappable
 dfstat3<-gather(dfstat2B,"Type","Count",2,3)
@@ -344,7 +344,7 @@ dev.off() # close png device
 #
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot1B.png 7974 FALSE  666 2015-04-01 20:17:30 2015-03-31 22:46:02 2015-03-31 22:46:02  no
+#> plot1B.png 7974 FALSE  666 2015-04-03 22:18:32 2015-04-03 21:37:05 2015-04-03 21:37:05  no
 #
 dfstat4<-mutate(dfstat,Missing.Ratio=Missing/Records,Geolocalized.Ratio=Geolocalized/Records)
 dfstat4<-dfstat4[,-(2:4)]
@@ -366,7 +366,7 @@ dev.off() # close png device
 #
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot2.png 7160 FALSE  666 2015-04-01 20:23:20 2015-04-01 20:17:30 2015-04-01 20:17:30  no
+#> plot2.png 7160 FALSE  666 2015-04-03 22:18:33 2015-04-03 21:30:14 2015-04-03 21:30:14  no
 #
 rm(dfstat2A,dfstat2B,dfstat3,dfstat4,dfstat5)
 #
@@ -395,7 +395,7 @@ dev.off() # close png device
 #
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot2A.png 8361 FALSE  666 2015-04-01 20:26:13 2015-04-01 20:26:13 2015-04-01 20:26:22  no
+#> plot2A.png 9302 FALSE  666 2015-04-03 22:18:34 2015-04-03 21:30:14 2015-04-03 21:30:14  no
 #
 dfstat2<-select(pm25,Year,Event.Type,State.Name,County.Name,Longitude,Latitude)
 by_year_Event.Type<-group_by(dfstat2,Year,Event.Type,State.Name,County.Name,Longitude,Latitude)
@@ -417,7 +417,7 @@ dev.off() # close png device
 ##
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot3A.png 390469 FALSE  666 2015-04-02 11:37:31 2015-04-02 11:31:28 2015-04-02 11:31:28  no
+#> plot3A.png 942534 FALSE  666 2015-04-03 22:18:50 2015-04-03 21:30:14 2015-04-03 21:30:14  no
 #
 by_Event.Type<-group_by(dfstat2,Event.Type,State.Name)
 dfstat4<-summarize(by_Event.Type,Events=n())
@@ -440,7 +440,7 @@ dev.off() # close png device
 ##
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot3B.png 107623 FALSE  666 2015-04-01 23:49:42 2015-04-01 23:48:53 2015-04-01 23:48:53  no
+#> plot3B.png 70513 FALSE  666 2015-04-03 22:18:53 2015-04-03 21:30:13 2015-04-03 21:30:13  no
 #
 by_Event.Type2<-group_by(dfstat2,Event.Type,State.Name,County.Name)
 dfstat6<-summarize(by_Event.Type2,Events=n())
@@ -481,7 +481,7 @@ dev.off() # close png device
 #
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot3C.png 149812 FALSE  666 2015-04-03 19:35:25 2015-04-03 19:34:08 2015-04-03 19:34:08  no
+#> plot3C.png 149826 FALSE  666 2015-04-03 22:19:00 2015-04-03 21:29:59 2015-04-03 21:29:59  no
 #
 dfstat6<-dfstat6[,-5]
 by_state_Type<-group_by(dfstat6,state,Type)
@@ -502,7 +502,7 @@ dev.off() # close png device
 ##
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot3B.png 107623 FALSE  666 2015-04-01 23:49:42 2015-04-01 23:48:53 2015-04-01 23:48:53  no
+#> plot3D.png 51629 FALSE  666 2015-04-03 22:19:04 2015-04-03 21:30:14 2015-04-03 21:30:14  no
 #
 dfstat8<-data.frame(dfstat7)
 dfstat8<-dfstat8[,-5]
@@ -537,7 +537,7 @@ dev.off() # close png device
 #
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot3E.png 106080 FALSE  666 2015-04-03 21:17:26 2015-04-03 21:16:10 2015-04-03 21:16:10  no
+#> plot3E.png 106318 FALSE  666 2015-04-03 22:19:10 2015-04-03 21:30:14 2015-04-03 21:30:14  no
 #
 myPNGfile<-"plot3.png"
 png(filename=myPNGfile,width=1280,height=1280)        # open png device for plot3.png 480x480 pix
@@ -551,7 +551,7 @@ dev.off() # close png device
 ##
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot3.png 252272 FALSE  666 2015-04-02 14:02:41 2015-04-02 13:59:44 2015-04-02 13:59:44  no
+#> plot3.png 250576 FALSE  666 2015-04-03 22:19:20 2015-04-03 21:36:57 2015-04-03 21:36:57  no
 #
 myPNGfile<-"plot4.png"
 png(filename=myPNGfile,width=1280,height=1280)        # open png device for plot3.png 480x480 pix
@@ -565,7 +565,7 @@ dev.off() # close png device
 ##
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot3.png 252272 FALSE  666 2015-04-02 14:02:41 2015-04-02 13:59:44 2015-04-02 13:59:44  no
+#> plot4.png 202974 FALSE  666 2015-04-03 22:19:44 2015-04-03 21:36:57 2015-04-03 21:36:57  no
 #
 myPNGfile<-"plot4A.png"
 png(filename=myPNGfile,width=1280,height=1280)        # open png device for plot3.png 480x480 pix
@@ -579,5 +579,6 @@ dev.off() # close png device
 ##
 print(file.info(myPNGfile))
 #> size isdir mode               mtime               ctime               atime exe
-#> plot4.png 205684 FALSE  666 2015-04-02 14:15:53 2015-04-02 14:14:07 2015-04-02 14:14:07  no
+#> plot4A.png 485956 FALSE  666 2015-04-03 22:20:07 2015-04-03 21:36:57 2015-04-03 21:36:57  no
+
 #
